@@ -22,14 +22,67 @@ from agent_reliability_lab.graders.final_state import FinalStateGrader
 from agent_reliability_lab.graders.policy import PolicyGrader
 from agent_reliability_lab.graders.tool_call import ToolCallGrader
 from agent_reliability_lab.harness.results import RunnerOutcome, TrialResult
-from agent_reliability_lab.harness.tasks import TaskDefinition, TaskLoader
-from agent_reliability_lab.harness.trace import TraceRecorder
+from agent_reliability_lab.harness.tasks import (
+    ALLOWED_TABLES,
+    StateAssertion,
+    TaskDefinition,
+    TaskLoader,
+)
+from agent_reliability_lab.harness.trace import (
+    TraceRecorder,
+    redact_text_pii,
+    scrub_payload_pii,
+)
 
 _MUTATION_TABLES = ("returns", "refunds", "approvals", "payments", "case_events")
 
 
 def _utc_now() -> datetime:
     return datetime.now(tz=UTC)
+
+
+def summarize_assertion_state(
+    connection: sqlite3.Connection,
+    assertions: list[StateAssertion],
+) -> list[dict[str, Any]]:
+    """Capture targeted actual counts/fields for task assertions (not a DB dump)."""
+    summaries: list[dict[str, Any]] = []
+    for assertion in assertions:
+        if assertion.table not in ALLOWED_TABLES:
+            continue
+        where_parts: list[str] = []
+        values: list[Any] = []
+        for column, expected in assertion.filters.items():
+            if not column.isidentifier():
+                continue
+            where_parts.append(f"{column} = ?")
+            values.append(expected)
+        where_sql = f" WHERE {' AND '.join(where_parts)}" if where_parts else ""
+        count = int(
+            connection.execute(
+                f"SELECT COUNT(*) AS n FROM {assertion.table}{where_sql}",
+                values,
+            ).fetchone()["n"]
+        )
+        entry: dict[str, Any] = {
+            "table": assertion.table,
+            "filters": assertion.filters,
+            "actual_count": count,
+            "expected_count": assertion.expected_count,
+        }
+        if count > 0 and assertion.expected_fields:
+            row = connection.execute(
+                f"SELECT * FROM {assertion.table}{where_sql} LIMIT 1",
+                values,
+            ).fetchone()
+            if row is not None:
+                row_map = dict(row)
+                entry["actual_fields"] = {
+                    key: row_map.get(key) for key in assertion.expected_fields
+                }
+                entry["expected_fields"] = dict(assertion.expected_fields)
+        summaries.append(entry)
+    return summaries
 
 
 def snapshot_mutation_state(connection: sqlite3.Connection) -> dict[str, Any]:
@@ -108,10 +161,8 @@ class TrialRunner:
         grader_results: list[Any] = []
 
         env = RetailEnvironment(task.fixture_id)
-        db_path_before_close: Path | None = None
         try:
             env.open()
-            db_path_before_close = env.db_path
             step_number = 0
             max_steps = task.maximum_steps
 
@@ -270,23 +321,36 @@ class TrialRunner:
                 grader_results = []
 
             passed, overall_score = compute_overall(grader_results, outcome)
-            artifact_path = self._write_artifact(
-                TrialResult(
-                    run_id=run_id,
-                    task_id=task.task_id,
-                    agent_name=agent.name,
-                    runner_outcome=outcome,
-                    passed=passed,
-                    overall_score=overall_score,
-                    step_count=len(recorder.steps),
-                    final_response=final_response,
-                    grader_results=grader_results,
-                    trace=recorder.steps,
-                    artifact_path=None,
-                    error_summary=error_summary,
-                    metadata={"fixture_id": task.fixture_id},
-                )
+            actual_state = summarize_assertion_state(
+                env.connection, list(task.expected_final_state)
             )
+            total_latency_ms = sum(step.latency_ms for step in recorder.steps)
+            metadata: dict[str, Any] = {
+                "fixture_id": task.fixture_id,
+                "user_request": redact_text_pii(task.user_request),
+                "expected_final_state": [
+                    assertion.model_dump(mode="json")
+                    for assertion in task.expected_final_state
+                ],
+                "actual_state_summary": actual_state,
+                "total_latency_ms": total_latency_ms,
+            }
+            result_body = TrialResult(
+                run_id=run_id,
+                task_id=task.task_id,
+                agent_name=agent.name,
+                runner_outcome=outcome,
+                passed=passed,
+                overall_score=overall_score,
+                step_count=len(recorder.steps),
+                final_response=final_response,
+                grader_results=grader_results,
+                trace=recorder.steps,
+                artifact_path=None,
+                error_summary=error_summary,
+                metadata=metadata,
+            )
+            artifact_path = self._write_artifact(result_body)
             return TrialResult(
                 run_id=run_id,
                 task_id=task.task_id,
@@ -300,18 +364,15 @@ class TrialRunner:
                 trace=recorder.steps,
                 artifact_path=str(artifact_path),
                 error_summary=error_summary,
-                metadata={"fixture_id": task.fixture_id},
+                metadata=metadata,
             )
         finally:
             env.close()
-            if db_path_before_close is not None and db_path_before_close.exists():
-                # close() should have removed it; best-effort assert cleanup path.
-                pass
 
     def _write_artifact(self, result: TrialResult) -> Path:
         self.output_dir.mkdir(parents=True, exist_ok=True)
         path = self.output_dir / f"{result.task_id}_{result.run_id}.json"
-        payload = result.model_dump(mode="json")
+        payload = scrub_payload_pii(result.model_dump(mode="json"))
         path.write_text(
             json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"
         )
@@ -323,4 +384,5 @@ __all__ = [
     "compute_overall",
     "diff_state",
     "snapshot_mutation_state",
+    "summarize_assertion_state",
 ]

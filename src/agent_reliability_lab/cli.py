@@ -17,7 +17,7 @@ app = typer.Typer(
     name="arl",
     help=(
         "Agent Reliability Lab — deterministic evaluation harness "
-        "(Phase 1 Checkpoints 0–6)."
+        "(Phase 1 Checkpoints 0–7)."
     ),
     add_completion=False,
     no_args_is_help=True,

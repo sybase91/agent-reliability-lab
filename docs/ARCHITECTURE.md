@@ -87,6 +87,8 @@ write a JSON-safe artifact under `artifacts/`.
 | `graders/` | Final-state, tool-call, policy graders | Implemented | Read DB + trace; do not call LLMs in Phase 1 |
 | `evals/retail/tasks/` | JSON evaluation task definitions | Implemented (ten tasks) | Tasks declare expected outcomes, not agent code |
 | `artifacts/` | Machine-readable run results | Implemented (gitignored path) | Local only; no secrets |
+| `presentation/` | View models and formatters for the dashboard | Implemented | No SQLite; second-pass redaction |
+| `app/streamlit_app.py` | Streamlit rendering | Implemented | Must not contain domain/runner logic |
 
 ## 7. Implemented data architecture
 
@@ -268,8 +270,29 @@ proceed without a separate approval workflow for the return itself.
 | Tool-call grader | Required/forbidden tools, arguments, ordering, duplicates |
 | Policy grader | AuthZ, return window, final sale, approvals, cross-customer rules |
 | Scripted reference agent | Deterministic happy-path and failing trajectories without an LLM |
+| Presentation / dashboard | `presentation/` + `app/streamlit_app.py` — display-safe view models only |
 
 See also [EVALUATION.md](EVALUATION.md) for grader contracts.
+
+### Presentation layer boundary
+
+```mermaid
+flowchart LR
+  Runner[TrialRunner TrialResult] --> Formatters[presentation formatters]
+  Task[TaskDefinition] --> Formatters
+  Formatters --> ViewModel[DashboardViewModel]
+  ViewModel --> Streamlit[app/streamlit_app.py]
+```
+
+Why Streamlit does not contain domain logic:
+
+- The UI calls `run_dashboard_evaluation` / `build_dashboard_view`.
+- Tools, policies, graders, and SQLite stay behind the runner.
+- UI redaction re-scrubs emails and phones so widget text never shows raw
+  fixture PII even if a future field leaks into a result string.
+
+Artifacts also apply `scrub_payload_pii` before write so downloaded JSON matches
+the same redaction boundary.
 
 ## 11. Trust and safety boundaries
 
@@ -301,12 +324,11 @@ Background ADR: [decisions/0001-deterministic-first.md](decisions/0001-determini
 
 ## 13. Current status and next step
 
-**Checkpoints 0–6 are implemented:** packaging and evaluation CLI; retail
-SQLite domain; ten JSON tasks; runner and traces; three graders; reference and
-failing agents.
+**Phase 1 MVP Checkpoints 0–7 are implemented:** packaging and evaluation CLI;
+retail SQLite domain; ten JSON tasks; runner and traces; three graders; reference
+and failing agents; Streamlit dashboard; coverage/AppTest/CI hardening.
 
-**Checkpoint 7 is next:** broader polish for coverage, CI hardening, and
-contributor documentation depth. A visual dashboard remains out of scope for
-the Phase 1 core harness.
+Later phases may add LLM adapters, public benchmarks, and richer analytics UX.
+Those remain explicitly planned and are not part of this MVP.
 
 Roadmap: [PHASES.md](PHASES.md).

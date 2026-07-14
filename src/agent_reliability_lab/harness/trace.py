@@ -15,6 +15,26 @@ _SENSITIVE_KEY_RE = re.compile(
     re.IGNORECASE,
 )
 
+_EMAIL_RE = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
+_PHONE_RE = re.compile(r"\+?\d[\d\-.\s]{6,}\d")
+
+
+def redact_text_pii(text: str) -> str:
+    """Redact email addresses and phone-like strings from free-form text."""
+    scrubbed = _EMAIL_RE.sub(REDACTED, text)
+    return _PHONE_RE.sub(REDACTED, scrubbed)
+
+
+def scrub_payload_pii(value: Any) -> Any:
+    """Recursively scrub email/phone substrings from JSON-serializable payloads."""
+    if isinstance(value, str):
+        return redact_text_pii(value)
+    if isinstance(value, dict):
+        return {str(k): scrub_payload_pii(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [scrub_payload_pii(item) for item in value]
+    return value
+
 
 def redact_value(key: str, value: Any) -> Any:
     """Redact sensitive scalar values; recurse into mappings and sequences."""
@@ -111,5 +131,7 @@ __all__ = [
     "TraceRecorder",
     "TraceStep",
     "redact_arguments",
+    "redact_text_pii",
     "redact_value",
+    "scrub_payload_pii",
 ]

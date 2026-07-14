@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from unittest.mock import patch
 
 from agent_reliability_lab.agents.failing import SkipVerificationAgent
 from agent_reliability_lab.agents.protocol import (
@@ -11,10 +12,29 @@ from agent_reliability_lab.agents.protocol import (
     AgentObservation,
 )
 from agent_reliability_lab.agents.reference import ScriptedReferenceAgent
+from agent_reliability_lab.domains.retail.environment import RetailEnvironment
 from agent_reliability_lab.harness.results import RunnerOutcome
 from agent_reliability_lab.harness.runner import TrialRunner
 from agent_reliability_lab.harness.tasks import TaskLoader
 from agent_reliability_lab.harness.trace import REDACTED, redact_arguments
+
+SENSITIVE_FRAGMENTS = (
+    "alice@example.test",
+    "bob@example.test",
+    "wrong@example.test",
+    "+1-555-0100",
+    "+1-555-0101",
+    "+1-555-9999",
+)
+
+
+def _assert_artifact_has_no_sensitive_pii(artifact_path: str | None) -> None:
+    assert artifact_path is not None
+    text = Path(artifact_path).read_text(encoding="utf-8")
+    for fragment in SENSITIVE_FRAGMENTS:
+        assert fragment not in text, (
+            f"sensitive value {fragment!r} leaked into artifact"
+        )
 
 
 class _ScriptedStub:
@@ -141,22 +161,45 @@ def test_failed_call_preserved_and_redacted(tmp_path: Path) -> None:
     )
     assert not result.passed
     assert any(step.status == "business_denial" for step in result.trace)
-    artifact = Path(result.artifact_path or "")
-    assert artifact.is_file()
-    text = artifact.read_text(encoding="utf-8")
-    assert "alice@example.test" not in text or REDACTED in text
+    _assert_artifact_has_no_sensitive_pii(result.artifact_path)
+    text = Path(result.artifact_path or "").read_text(encoding="utf-8")
+    assert REDACTED in text or "email" not in text.lower()
 
 
-def test_cleanup_after_success_and_failure(tmp_path: Path) -> None:
+def test_successful_and_failed_artifacts_never_contain_raw_pii(tmp_path: Path) -> None:
     runner = TrialRunner(output_dir=tmp_path)
-    ok = runner.run("expired_return_window", ScriptedReferenceAgent())
+    ok = runner.run("eligible_full_return", ScriptedReferenceAgent())
     bad = runner.run("eligible_full_return", SkipVerificationAgent())
     assert ok.passed
     assert not bad.passed
-    # Temporary DBs should not linger under system temp named with fixture leakage;
-    # runner closes environment in finally.
+    _assert_artifact_has_no_sensitive_pii(ok.artifact_path)
+    _assert_artifact_has_no_sensitive_pii(bad.artifact_path)
+    # Cross-customer task also embeds bob@ in the source request.
+    cross = runner.run("cross_customer_order_access", ScriptedReferenceAgent())
+    assert cross.passed
+    _assert_artifact_has_no_sensitive_pii(cross.artifact_path)
+
+
+def test_cleanup_after_success_and_failure(tmp_path: Path) -> None:
+    recorded_paths: list[Path] = []
+    original_open = RetailEnvironment.open
+
+    def tracking_open(self: RetailEnvironment) -> RetailEnvironment:
+        original_open(self)
+        recorded_paths.append(self.db_path)
+        return self
+
+    runner = TrialRunner(output_dir=tmp_path)
+    with patch.object(RetailEnvironment, "open", tracking_open):
+        ok = runner.run("expired_return_window", ScriptedReferenceAgent())
+        bad = runner.run("eligible_full_return", SkipVerificationAgent())
+    assert ok.passed
+    assert not bad.passed
     assert ok.artifact_path is not None
     assert bad.artifact_path is not None
+    assert len(recorded_paths) >= 2
+    for path in recorded_paths:
+        assert not path.exists(), f"temporary database still present: {path}"
 
 
 def test_reference_agent_passes_all_ten(tmp_path: Path) -> None:

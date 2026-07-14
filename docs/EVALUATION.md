@@ -2,9 +2,9 @@
 
 ## Status
 
-Evaluation runtime is **implemented** for Phase 1 Checkpoints 3–6: JSON tasks,
+Evaluation runtime is **implemented** for Phase 1 Checkpoints 3–7: JSON tasks,
 `TrialRunner`, structured traces, three rule-based graders, scripted agents,
-and CLI commands.
+CLI commands, and the Streamlit dashboard.
 
 A task passes only when **all critical graders** pass. Overall score is for
 display; a critical failure forces overall score to `0` and `passed=false`.
@@ -86,3 +86,26 @@ steps: 6
 Reference suite: **10/10** passed. Intentionally failing agents
 (`skip_verification`, `approval_bypass`) fail for grader reasons without
 hard-coded pass/fail flags inside the agents.
+
+## Dashboard view of traces and graders
+
+The Streamlit app (`make app`) renders the same harness outputs used by the CLI:
+
+| UI section | Source |
+| --- | --- |
+| Overall PASS/FAIL | `TrialResult.passed` (critical graders must all pass) |
+| Grader cards | Each `GraderResult` with explanation + evidence summary |
+| Agent execution timeline | Ordered `TraceStep` records (redacted arguments) |
+| State comparison | Expected assertions vs targeted `actual_state_summary` |
+| Failure analysis | First denying/error step + first failing critical grader |
+
+### How to interpret a failure
+
+1. Read **Point of failure** (which step or grader rejected the run).
+2. Read **Caught by** (Final State, Tool Calls, or Policy Compliance).
+3. Read **Why** for the concise explanation.
+4. Check **State consequence** to see whether bad rows persisted.
+5. Expand the failing grader’s evidence and the timeline step for redacted args.
+
+Deterministic mode still applies: free-form request edits are recorded but not
+LLM-interpreted.

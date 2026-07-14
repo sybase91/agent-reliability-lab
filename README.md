@@ -2,7 +2,7 @@
 
 An offline evaluation harness that tests whether enterprise AI agents use tools
 correctly, follow business policies, and leave application data in the right
-final state.
+final state — with a visual Streamlit dashboard for reviewing runs.
 
 ## The business problem
 
@@ -10,73 +10,52 @@ Enterprise agents do not only chat. They look up customers, create returns,
 issue refunds, and change records in business systems. Those actions have
 financial, compliance, and trust consequences.
 
-A fluent reply is not proof that the work was done correctly. A retail refund
-agent might say “Your refund has been issued” while still accessing the wrong
-customer, skipping identity checks, ignoring the return window, refunding a
-final-sale item, issuing the wrong amount, bypassing approval, creating a
-duplicate refund, or changing nothing in the database at all.
+A fluent reply is not proof that the work was done correctly. Teams need
+repeatable tests they can run before deploying or changing an agent. This
+project is that testing system. It is **not** a customer-service agent.
 
-Teams need repeatable tests they can run before deploying or changing an agent.
-This project is that testing system. It is **not** a customer-service agent.
+## Phase 1 MVP capabilities (Checkpoints 0–7)
 
-## What this project evaluates
+| Capability | Status |
+| --- | --- |
+| SQLite retail environment, policies, seven typed tools | Implemented |
+| Ten JSON evaluation tasks | Implemented |
+| Trace recorder + isolated `TrialRunner` | Implemented |
+| Final-state, tool-call, and policy graders | Implemented |
+| Scripted reference agent (10/10) and failing demos | Implemented |
+| CLI evaluation commands | Implemented |
+| Streamlit visual evaluation dashboard | Implemented |
+| Coverage ≥85%, AppTest, redaction/cleanup hardening | Implemented |
 
-Phase 1 scores agent behavior and outcomes in a synthetic retail environment,
-not answer fluency alone.
+## Deterministic-mode limitation
 
-| Dimension | What it checks | Status |
-| --- | --- | --- |
-| Final database state | Returns, refunds, approvals, and related records match the expected outcome | Implemented |
-| Tool selection | Required tools were used; forbidden tools were not | Implemented |
-| Tool arguments | Critical IDs, amounts, and quantities were correct | Implemented |
-| Tool ordering | Required steps happened in a valid sequence | Implemented |
-| Policy compliance | Identity, return window, final-sale, and approval rules were respected | Implemented |
-| Duplicate / idempotent behavior | Retries do not create extra mutations | Implemented |
-| Execution trace | Structured record of attempts, including failures | Implemented |
+The dashboard shows this caption:
 
-## How the Phase 1 system works
+> Deterministic MVP mode: the selected scenario defines the expected behavior.
+> The request text is recorded for the run but is not semantically interpreted
+> by an LLM.
 
-```mermaid
-flowchart TD
-    A[Evaluation task] --> B[Fresh SQLite retail environment]
-    B --> C[Agent under test]
-    C --> D[Typed tools and policies]
-    D --> E[Structured trace]
-    E --> F[Three graders]
-    F --> G[Pass / fail result]
-```
+Scripted agents follow fixed trajectories for the selected scenario. Editing
+the request text does **not** unlock arbitrary free-form agent reasoning.
 
-Every task starts from a known synthetic database state and has an expected
-final outcome. Graders inspect persisted data and the execution trace—not just
-the agent’s last message.
+## Visual workflow
 
-## Why the design starts without an LLM
+1. Select an evaluation scenario (one of ten fixtures).
+2. Choose the reference agent or a failing demo agent.
+3. View (and optionally edit) the customer request — PII is redacted in the UI.
+4. Run the evaluation.
+5. Inspect overall PASS/FAIL, three grader cards, ordered agent steps,
+   expected vs actual state, and (on failure) a failure analysis section.
+6. Download the JSON result artifact.
 
-The harness must be proven deterministic and correct first. If an evaluation
-fails while a live model, network, or LLM judge is in the loop, the cause could
-be the agent, the model, the grader, the network, or the framework itself.
-Phase 1 removes that ambiguity by using scripted behavior, rule-based graders,
-and fixed synthetic state.
+### Reference vs failing-agent demo
 
-## Current implementation status
-
-**Implemented (Checkpoints 0–6):**
-
-- Python 3.12 package and Typer evaluation CLI
-- Automated quality checks and CI (ruff, mypy, pytest)
-- SQLite retail schema with foreign keys and integer-cent money
-- Deterministic synthetic fixtures and isolated `RetailEnvironment`
-- Pure retail policy engine and seven typed tools
-- Ten JSON evaluation tasks under `evals/retail/tasks/`
-- Agent protocol, trace recorder, and `TrialRunner`
-- Final-state, tool-call, and policy graders
-- Scripted reference agent (10/10) and intentionally failing agents
-- JSON artifacts under `artifacts/` (gitignored)
-
-**Planned:**
-
-- Checkpoint 7 polish (coverage/CI hardening)
-- Streamlit / visual dashboard (not in Phase 1 core harness)
+| Agent | Expected result |
+| --- | --- |
+| `reference` | Passes all 10 tasks |
+| `skip_verification` | Fails (sensitive tools before verify) |
+| `approval_bypass` | Fails high-value approval path |
+| `duplicate_refund` | Fails duplicate-mutation expectations |
 
 ## Quick start
 
@@ -85,93 +64,82 @@ Requires Python 3.12+.
 ```bash
 python3.12 -m venv .venv
 source .venv/bin/activate
-make setup
+make setup          # installs .[dev,ui]
 make smoke
-make check
+make mvp-check
 ```
 
-Evaluate with the CLI:
+### CLI evaluation
 
 ```bash
 python -m agent_reliability_lab.cli list-tasks
 python -m agent_reliability_lab.cli run-task eligible_full_return --agent reference
 python -m agent_reliability_lab.cli run-suite --agent reference
-python -m agent_reliability_lab.cli show-result artifacts/<result-file>.json
 ```
 
-Failing demos:
+### Dashboard
 
 ```bash
-python -m agent_reliability_lab.cli run-suite --agent skip_verification
-python -m agent_reliability_lab.cli run-suite --agent approval_bypass
+make app
+# or:
+streamlit run app/streamlit_app.py
 ```
 
-Useful quality commands:
+Then open the local URL Streamlit prints (typically http://localhost:8501).
 
-```bash
-make setup      # editable install with dev extras
-make format     # ruff format
-make lint       # ruff check
-make typecheck  # mypy src
-make test       # pytest
-make test-cov   # pytest with coverage
-make smoke      # import + CLI --help
-make check      # format check + lint + typecheck + test
-```
+### Screenshot placeholder
 
-## Example real CLI result
+To capture a dashboard screenshot for docs or demos:
 
-Generated from the current build with the reference agent:
+1. Run `make app` and open the UI.
+2. Select `eligible_full_return` + `reference`, click **Run evaluation**.
+3. Capture the viewport showing the PASS summary and grader cards.
+4. Save the image locally (do not commit large binaries unless intentionally adding
+   media assets). Replace this placeholder section with the image path when ready.
 
-```text
-task: eligible_full_return
-agent: reference
-overall: PASS (score=1.00, outcome=completed)
-  grader final_state: pass (All final-state assertions passed.)
-  grader tool_call: pass (Tool-call constraints satisfied.)
-  grader policy: pass (Policy constraints satisfied.)
-steps: 6
-artifact: artifacts/eligible_full_return_<run_id>.json
-```
+## Quality results (current build)
 
-Suite summary (reference agent):
+Commands: `make mvp-check`, `pytest --cov=... --cov-fail-under=85`
 
-```text
-passed tasks: 10
-failed tasks: 0
-total tasks: 10
-pass rate: 100%
-```
+| Check | Result |
+| --- | --- |
+| Unit + UI AppTests | 116 passed |
+| Coverage | 88.06% (fail-under 85%) |
+| Reference suite | 10/10 PASS |
+| Failing agents | FAIL as expected |
+| `make mvp-check` | passed |
 
 ## Repository structure
 
 ```text
+app/streamlit_app.py              # Streamlit rendering only
 src/agent_reliability_lab/
-  cli.py              # Evaluation CLI
-  agents/             # Protocol, reference agent, failing demos
-  domains/retail/     # Schema, models, fixtures, policies, tools, environment
-  harness/            # Tasks, traces, TrialRunner, results
-  graders/            # Final-state, tool-call, policy graders
-evals/retail/tasks/   # Ten JSON evaluation tasks
-docs/                 # Architecture, phases, evaluation design
-tests/unit/           # Unit and harness tests
-artifacts/            # Local run results (gitignored)
+  cli.py
+  agents/                         # Protocol, reference, failing agents
+  domains/retail/                 # Schema, fixtures, policies, tools
+  harness/                        # Tasks, runner, traces, results
+  graders/                        # Final-state, tool-call, policy
+  presentation/                   # View models + formatters for the UI
+evals/retail/tasks/               # Ten JSON tasks
+tests/unit/                       # Harness and domain tests
+tests/ui/                         # Streamlit AppTest suite
+artifacts/                        # Local JSON results (gitignored)
 ```
 
 ## Roadmap and non-goals
 
 Full phase plan: [docs/PHASES.md](docs/PHASES.md).
 
-Phase 1 does **not** include LLM APIs, LangGraph, RAG, a dashboard, or public
-benchmark integrations. Those belong to later phases if at all.
+Phase 1 does **not** include LLM APIs, LangGraph, RAG, authentication, or
+public benchmark packages. Those remain planned for later phases.
 
 ## Limitations
 
-- No visual dashboard yet (Checkpoint 7 / later UX phases)
-- Retail data is synthetic only; no live customer systems
-- Manager approval is a deterministic mock, not a production approval service
-- Phase 1 does not measure natural-language quality
-- Agents under test must speak the typed tool protocol (no free-form SQL)
+- No custom authentication on the dashboard
+- Synthetic retail data only
+- Manager approval is a deterministic mock
+- Request text is not LLM-interpreted
+- Checkpoint 7 hardens quality; later phases may add richer UX analytics
 
 Details: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md),
 [docs/EVALUATION.md](docs/EVALUATION.md).
