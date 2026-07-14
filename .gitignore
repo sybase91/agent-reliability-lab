@@ -216,3 +216,27 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Agent Reliability Lab local / generated outputs (Checkpoint 0+)
+
+# Evaluation run artifacts
+artifacts/
+runs/
+
+# Local SQLite databases (temp and durable)
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+
+# Local output / coverage extras
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+.pytest_cache/
+
+# Example env file is committed; real secrets are not
+!.env.example
