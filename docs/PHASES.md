@@ -9,7 +9,7 @@ typed tools, JSON tasks, traces, three graders, and a scripted reference agent.
 | --- | --- |
 | 0 Packaging, tooling, docs skeleton | **Implemented** |
 | 1 SQLite schema, models, fixtures | **Implemented** |
-| 2 Policies and typed tools | Planned |
+| 2 Policies and typed tools | **Implemented** |
 | 3 Ten JSON evaluation tasks | Planned |
 | 4 Trace recorder and isolated runner | Planned |
 | 5 Final-state, tool-call, policy graders | Planned |

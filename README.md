@@ -30,11 +30,12 @@ not answer fluency alone.
 | Tool selection | Required tools were used; forbidden tools were not | Planned |
 | Tool arguments | Critical IDs, amounts, and quantities were correct | Planned |
 | Tool ordering | Required steps happened in a valid sequence | Planned |
-| Policy compliance | Identity, return window, final-sale, and approval rules were respected | Planned |
-| Duplicate / idempotent behavior | Retries do not create extra mutations | Planned |
+| Policy compliance | Identity, return window, final-sale, and approval rules were respected | Policy engine implemented; graders planned |
+| Duplicate / idempotent behavior | Retries do not create extra mutations | Tools enforce idempotency; graders planned |
 | Execution trace | Structured record of attempts, including failures | Planned |
 
-The SQLite retail environment those checks will read is already implemented.
+The SQLite retail environment and typed tools those checks will exercise are
+already implemented.
 
 ## How the finished Phase 1 system works
 
@@ -42,7 +43,7 @@ The SQLite retail environment those checks will read is already implemented.
 flowchart TD
     A[Evaluation task] --> B[Fresh SQLite retail environment]
     B --> C[Agent under test]
-    C --> D["Typed tools and policies (planned)"]
+    C --> D[Typed tools and policies]
     D --> E["Structured trace (planned)"]
     E --> F["Three graders (planned)"]
     F --> G[Pass / fail result]
@@ -62,7 +63,7 @@ and fixed synthetic state.
 
 ## Current implementation status
 
-**Implemented (Checkpoints 0–1):**
+**Implemented (Checkpoints 0–2):**
 
 - Python 3.12 package and Typer CLI foundation (`--help`, `--version`)
 - Automated quality checks and CI (ruff, mypy, pytest)
@@ -70,11 +71,15 @@ and fixed synthetic state.
 - Pydantic retail domain models
 - Deterministic synthetic fixtures (ten registered `fixture_id` values)
 - Isolated file-backed `RetailEnvironment` (create, seed, cleanup)
-- Tests for validation, transactions, fixtures, and environment isolation
+- Pure retail policy engine with stable machine-readable denial codes
+- Seven typed tools (`verify_customer`, `get_order`, `check_return_eligibility`,
+  `request_manager_approval`, `create_return`, `create_refund`,
+  `get_refund_status`) with transactional mutations and idempotent replay
+- Tool registry/dispatcher (no harness tracing yet)
+- Tests for validation, transactions, fixtures, policies, and tools
 
 **Planned (remaining Phase 1 checkpoints):**
 
-- Policy engine and typed retail tools (Checkpoint 2)
 - Ten JSON evaluation tasks (Checkpoint 3)
 - Trace recorder and isolated runner (Checkpoint 4)
 - Final-state, tool-call, and policy graders (Checkpoint 5)
@@ -85,7 +90,10 @@ and fixed synthetic state.
 
 SQLite is the source of truth for retail state. Each environment uses its own
 temporary database file so mutations cannot leak across tasks. Boundary data
-is validated with Pydantic; there is no ORM.
+is validated with Pydantic; there is no ORM. Policies are pure functions; tools
+query SQLite, invoke policies, and return structured `ToolResult` objects.
+Future harness tracing will wrap tool invocation and must not live inside the
+domain tools.
 
 Details: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
@@ -126,7 +134,7 @@ are planned and not available yet.
 src/agent_reliability_lab/
   cli.py              # CLI entry (help/version today)
   agents/             # Agent protocol / reference agent (planned)
-  domains/retail/     # SQLite schema, models, fixtures, environment
+  domains/retail/     # Schema, models, fixtures, policies, tools, environment
   harness/            # Task runner and traces (planned)
   graders/            # Final-state, tool-call, policy graders (planned)
 docs/                 # Architecture, phases, evaluation design
@@ -142,9 +150,10 @@ benchmark integrations. Those belong to later phases if at all.
 
 ## Limitations
 
-- No policies, tools, tasks, runners, traces, graders, or agents yet
+- No evaluation tasks, runners, traces, graders, or agents yet
 - CLI does not run evaluations
 - Retail data is synthetic only; no live customer systems
+- Manager approval is a deterministic mock, not a production approval service
 - Phase 1 does not measure natural-language quality
 
 Example of a future pass/fail summary (not actual output):
