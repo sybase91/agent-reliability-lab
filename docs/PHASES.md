@@ -8,7 +8,7 @@ typed tools, JSON tasks, traces, three graders, and a scripted reference agent.
 | Checkpoint | Status |
 | --- | --- |
 | 0 Packaging, tooling, docs skeleton | **Implemented** |
-| 1 SQLite schema, models, fixtures | Planned |
+| 1 SQLite schema, models, fixtures | **Implemented** |
 | 2 Policies and typed tools | Planned |
 | 3 Ten JSON evaluation tasks | Planned |
 | 4 Trace recorder and isolated runner | Planned |

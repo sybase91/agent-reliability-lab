@@ -11,16 +11,24 @@ failures noisy and hard to debug.
 
 ## Currently implemented scope
 
-**Phase 1 is in progress. Checkpoint 0 (foundation) is implemented:**
+**Phase 1 is in progress.**
+
+**Checkpoint 0 (foundation) — implemented:**
 
 - Installable Python 3.12 package (`src/` layout)
 - Minimal Typer CLI (`python -m agent_reliability_lab.cli --help`)
 - Development tooling: pytest, ruff, mypy, Makefile
 - Documentation skeleton with implemented vs planned labels
 
+**Checkpoint 1 (SQLite retail domain) — implemented:**
+
+- Explicit SQLite schema (stdlib `sqlite3`, no ORM)
+- Pydantic boundary models (integer cents, timezone-aware UTC)
+- Deterministic synthetic fixtures (ten `fixture_id` values)
+- Isolated file-backed `RetailEnvironment` lifecycle
+
 **Not implemented yet (planned for later Phase 1 checkpoints):**
 
-- SQLite-backed retail environment
 - Retail policies and typed tools
 - JSON evaluation tasks
 - Task runner, traces, and graders
@@ -28,13 +36,14 @@ failures noisy and hard to debug.
 
 ## Why final-state evaluation matters
 
-*(Planned)* Grading persisted environment state after a trail of tool calls
-catches silent policy violations that “looked fluent” in the transcript alone.
+*(Planned for graders)* Inspecting persisted SQLite state after tool calls
+catches silent policy violations that “looked fluent” in a transcript alone.
+Checkpoint 1 provides the persisted environment those graders will read.
 
 ## Architecture summary
 
-Checkpoint 0 provides package layout and CLI only. Planned components are
-described in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+SQLite is the source of truth for retail state. See
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Quick start
 
@@ -43,6 +52,7 @@ python3.12 -m venv .venv
 source .venv/bin/activate
 make setup
 make smoke
+make check
 ```
 
 ## Commands
@@ -70,7 +80,8 @@ Task run commands (`list-tasks`, `run-task`, `run-suite`, `show-result`) are
 
 ## Current phase
 
-**Phase 1 — Deterministic retail harness (in progress).** Checkpoint 0 complete.
+**Phase 1 — Deterministic retail harness (in progress).** Checkpoints 0 and 1
+complete.
 
 ## Roadmap
 
@@ -78,6 +89,6 @@ See [docs/PHASES.md](docs/PHASES.md). Phases 2–7 are planned.
 
 ## Limitations
 
-- No retail domain, tools, tasks, runners, or graders yet
+- No policies, tools, evaluation tasks, runners, traces, graders, or agents yet
 - CLI does not execute evaluations
 - No LLM providers or external APIs
