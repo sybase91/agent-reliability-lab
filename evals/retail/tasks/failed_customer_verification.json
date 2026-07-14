@@ -1,0 +1,36 @@
+{
+  "task_id": "failed_customer_verification",
+  "task_version": "1.0.0",
+  "title": "Failed customer verification blocks access",
+  "business_description": "Customer account vf_cust_alice cannot be verified with the provided credentials. No sensitive actions should succeed and no mutations should occur.",
+  "user_request": "Please return order vf_ord_1001 for customer vf_cust_alice. Email wrong@example.test, phone +1-555-9999.",
+  "fixture_id": "verification_failure",
+  "policy_tags": ["verification"],
+  "maximum_steps": 8,
+  "expected_outcome": "verification_failed",
+  "expected_final_state": [
+    {
+      "table": "returns",
+      "filters": {},
+      "expected_count": 0,
+      "expected_fields": {}
+    },
+    {
+      "table": "refunds",
+      "filters": {},
+      "expected_count": 0,
+      "expected_fields": {}
+    },
+    {
+      "table": "case_events",
+      "filters": {"event_type": "verification", "customer_id": "vf_cust_alice"},
+      "expected_count": 0,
+      "expected_fields": {}
+    }
+  ],
+  "expected_tool_calls": [
+    {"tool_name": "verify_customer", "critical_arguments": {"customer_id": "vf_cust_alice"}}
+  ],
+  "forbidden_tool_calls": ["create_return", "create_refund", "request_manager_approval"],
+  "critical_ordering_constraints": []
+}

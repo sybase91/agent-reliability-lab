@@ -1,0 +1,44 @@
+{
+  "task_id": "eligible_full_return",
+  "task_version": "1.0.0",
+  "title": "Eligible full return and refund",
+  "business_description": "Customer Alice requests a full return of a delivered mug that is within the return window and not final sale.",
+  "user_request": "Please return and refund my order er_ord_1001 for customer er_cust_alice. I am alice@example.test, phone +1-555-0100.",
+  "fixture_id": "eligible_return",
+  "policy_tags": ["return_window", "verification", "refund"],
+  "maximum_steps": 12,
+  "expected_outcome": "return_and_refund_completed",
+  "expected_final_state": [
+    {
+      "table": "returns",
+      "filters": {"order_id": "er_ord_1001", "customer_id": "er_cust_alice"},
+      "expected_count": 1,
+      "expected_fields": {"status": "approved"}
+    },
+    {
+      "table": "refunds",
+      "filters": {"payment_id": "er_pay_1"},
+      "expected_count": 1,
+      "expected_fields": {"amount_cents": 2500, "status": "completed"}
+    },
+    {
+      "table": "payments",
+      "filters": {"payment_id": "er_pay_1"},
+      "expected_count": 1,
+      "expected_fields": {"status": "refunded"}
+    }
+  ],
+  "expected_tool_calls": [
+    {"tool_name": "verify_customer", "critical_arguments": {"customer_id": "er_cust_alice"}},
+    {"tool_name": "get_order", "critical_arguments": {"order_id": "er_ord_1001"}},
+    {"tool_name": "check_return_eligibility", "critical_arguments": {"order_item_id": "er_oi_1"}},
+    {"tool_name": "create_return", "critical_arguments": {"order_id": "er_ord_1001"}},
+    {"tool_name": "create_refund", "critical_arguments": {"amount_cents": 2500}}
+  ],
+  "forbidden_tool_calls": [],
+  "critical_ordering_constraints": [
+    {"before": "verify_customer", "after": "get_order"},
+    {"before": "verify_customer", "after": "create_return"},
+    {"before": "create_return", "after": "create_refund"}
+  ]
+}

@@ -26,32 +26,29 @@ not answer fluency alone.
 
 | Dimension | What it checks | Status |
 | --- | --- | --- |
-| Final database state | Returns, refunds, approvals, and related records match the expected outcome | Planned |
-| Tool selection | Required tools were used; forbidden tools were not | Planned |
-| Tool arguments | Critical IDs, amounts, and quantities were correct | Planned |
-| Tool ordering | Required steps happened in a valid sequence | Planned |
-| Policy compliance | Identity, return window, final-sale, and approval rules were respected | Policy engine implemented; graders planned |
-| Duplicate / idempotent behavior | Retries do not create extra mutations | Tools enforce idempotency; graders planned |
-| Execution trace | Structured record of attempts, including failures | Planned |
+| Final database state | Returns, refunds, approvals, and related records match the expected outcome | Implemented |
+| Tool selection | Required tools were used; forbidden tools were not | Implemented |
+| Tool arguments | Critical IDs, amounts, and quantities were correct | Implemented |
+| Tool ordering | Required steps happened in a valid sequence | Implemented |
+| Policy compliance | Identity, return window, final-sale, and approval rules were respected | Implemented |
+| Duplicate / idempotent behavior | Retries do not create extra mutations | Implemented |
+| Execution trace | Structured record of attempts, including failures | Implemented |
 
-The SQLite retail environment and typed tools those checks will exercise are
-already implemented.
-
-## How the finished Phase 1 system works
+## How the Phase 1 system works
 
 ```mermaid
 flowchart TD
     A[Evaluation task] --> B[Fresh SQLite retail environment]
     B --> C[Agent under test]
     C --> D[Typed tools and policies]
-    D --> E["Structured trace (planned)"]
-    E --> F["Three graders (planned)"]
+    D --> E[Structured trace]
+    E --> F[Three graders]
     F --> G[Pass / fail result]
 ```
 
 Every task starts from a known synthetic database state and has an expected
-final outcome. Graders will inspect persisted data and the execution trace—
-not just the agent’s last message.
+final outcome. Graders inspect persisted data and the execution trace—not just
+the agent’s last message.
 
 ## Why the design starts without an LLM
 
@@ -63,39 +60,23 @@ and fixed synthetic state.
 
 ## Current implementation status
 
-**Implemented (Checkpoints 0–2):**
+**Implemented (Checkpoints 0–6):**
 
-- Python 3.12 package and Typer CLI foundation (`--help`, `--version`)
+- Python 3.12 package and Typer evaluation CLI
 - Automated quality checks and CI (ruff, mypy, pytest)
 - SQLite retail schema with foreign keys and integer-cent money
-- Pydantic retail domain models
-- Deterministic synthetic fixtures (ten registered `fixture_id` values)
-- Isolated file-backed `RetailEnvironment` (create, seed, cleanup)
-- Pure retail policy engine with stable machine-readable denial codes
-- Seven typed tools (`verify_customer`, `get_order`, `check_return_eligibility`,
-  `request_manager_approval`, `create_return`, `create_refund`,
-  `get_refund_status`) with transactional mutations and idempotent replay
-- Tool registry/dispatcher (no harness tracing yet)
-- Tests for validation, transactions, fixtures, policies, and tools
+- Deterministic synthetic fixtures and isolated `RetailEnvironment`
+- Pure retail policy engine and seven typed tools
+- Ten JSON evaluation tasks under `evals/retail/tasks/`
+- Agent protocol, trace recorder, and `TrialRunner`
+- Final-state, tool-call, and policy graders
+- Scripted reference agent (10/10) and intentionally failing agents
+- JSON artifacts under `artifacts/` (gitignored)
 
-**Planned (remaining Phase 1 checkpoints):**
+**Planned:**
 
-- Ten JSON evaluation tasks (Checkpoint 3)
-- Trace recorder and isolated runner (Checkpoint 4)
-- Final-state, tool-call, and policy graders (Checkpoint 5)
-- Scripted reference agent and evaluation CLI commands (Checkpoint 6)
-- Full test/coverage and CI polish (Checkpoint 7)
-
-## Current technical architecture
-
-SQLite is the source of truth for retail state. Each environment uses its own
-temporary database file so mutations cannot leak across tasks. Boundary data
-is validated with Pydantic; there is no ORM. Policies are pure functions; tools
-query SQLite, invoke policies, and return structured `ToolResult` objects.
-Future harness tracing will wrap tool invocation and must not live inside the
-domain tools.
-
-Details: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+- Checkpoint 7 polish (coverage/CI hardening)
+- Streamlit / visual dashboard (not in Phase 1 core harness)
 
 ## Quick start
 
@@ -109,7 +90,23 @@ make smoke
 make check
 ```
 
-Useful commands today:
+Evaluate with the CLI:
+
+```bash
+python -m agent_reliability_lab.cli list-tasks
+python -m agent_reliability_lab.cli run-task eligible_full_return --agent reference
+python -m agent_reliability_lab.cli run-suite --agent reference
+python -m agent_reliability_lab.cli show-result artifacts/<result-file>.json
+```
+
+Failing demos:
+
+```bash
+python -m agent_reliability_lab.cli run-suite --agent skip_verification
+python -m agent_reliability_lab.cli run-suite --agent approval_bypass
+```
+
+Useful quality commands:
 
 ```bash
 make setup      # editable install with dev extras
@@ -120,25 +117,45 @@ make test       # pytest
 make test-cov   # pytest with coverage
 make smoke      # import + CLI --help
 make check      # format check + lint + typecheck + test
-
-python -m agent_reliability_lab.cli --help
-python -m agent_reliability_lab.cli --version
 ```
 
-Evaluation CLI commands (`list-tasks`, `run-task`, `run-suite`, `show-result`)
-are planned and not available yet.
+## Example real CLI result
+
+Generated from the current build with the reference agent:
+
+```text
+task: eligible_full_return
+agent: reference
+overall: PASS (score=1.00, outcome=completed)
+  grader final_state: pass (All final-state assertions passed.)
+  grader tool_call: pass (Tool-call constraints satisfied.)
+  grader policy: pass (Policy constraints satisfied.)
+steps: 6
+artifact: artifacts/eligible_full_return_<run_id>.json
+```
+
+Suite summary (reference agent):
+
+```text
+passed tasks: 10
+failed tasks: 0
+total tasks: 10
+pass rate: 100%
+```
 
 ## Repository structure
 
 ```text
 src/agent_reliability_lab/
-  cli.py              # CLI entry (help/version today)
-  agents/             # Agent protocol / reference agent (planned)
+  cli.py              # Evaluation CLI
+  agents/             # Protocol, reference agent, failing demos
   domains/retail/     # Schema, models, fixtures, policies, tools, environment
-  harness/            # Task runner and traces (planned)
-  graders/            # Final-state, tool-call, policy graders (planned)
+  harness/            # Tasks, traces, TrialRunner, results
+  graders/            # Final-state, tool-call, policy graders
+evals/retail/tasks/   # Ten JSON evaluation tasks
 docs/                 # Architecture, phases, evaluation design
-tests/unit/           # Unit tests for package and retail domain
+tests/unit/           # Unit and harness tests
+artifacts/            # Local run results (gitignored)
 ```
 
 ## Roadmap and non-goals
@@ -150,16 +167,11 @@ benchmark integrations. Those belong to later phases if at all.
 
 ## Limitations
 
-- No evaluation tasks, runners, traces, graders, or agents yet
-- CLI does not run evaluations
+- No visual dashboard yet (Checkpoint 7 / later UX phases)
 - Retail data is synthetic only; no live customer systems
 - Manager approval is a deterministic mock, not a production approval service
 - Phase 1 does not measure natural-language quality
+- Agents under test must speak the typed tool protocol (no free-form SQL)
 
-Example of a future pass/fail summary (not actual output):
-
-```text
-task_id: eligible_return_happy_path
-passed: true
-graders: final_state=pass, tool_call=pass, policy=pass
-```
+Details: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md),
+[docs/EVALUATION.md](docs/EVALUATION.md).

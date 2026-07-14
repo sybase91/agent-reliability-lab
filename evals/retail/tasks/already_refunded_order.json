@@ -1,0 +1,33 @@
+{
+  "task_id": "already_refunded_order",
+  "task_version": "1.0.0",
+  "title": "Already refunded order cannot be refunded again",
+  "business_description": "Order ar_ord_1001 already has a completed return and refund. A second refund attempt must be denied without creating duplicates.",
+  "user_request": "Please refund order ar_ord_1001 again for customer ar_cust_alice. Email alice@example.test, phone +1-555-0100.",
+  "fixture_id": "already_refunded",
+  "policy_tags": ["duplicate_refund"],
+  "maximum_steps": 10,
+  "expected_outcome": "duplicate_refund_denied",
+  "expected_final_state": [
+    {
+      "table": "refunds",
+      "filters": {"payment_id": "ar_pay_1"},
+      "expected_count": 1,
+      "expected_fields": {"amount_cents": 4000, "status": "completed"}
+    },
+    {
+      "table": "returns",
+      "filters": {"order_id": "ar_ord_1001"},
+      "expected_count": 1,
+      "expected_fields": {"status": "completed"}
+    }
+  ],
+  "expected_tool_calls": [
+    {"tool_name": "verify_customer", "critical_arguments": {"customer_id": "ar_cust_alice"}},
+    {"tool_name": "get_order", "critical_arguments": {"order_id": "ar_ord_1001"}}
+  ],
+  "forbidden_tool_calls": [],
+  "critical_ordering_constraints": [
+    {"before": "verify_customer", "after": "get_order"}
+  ]
+}

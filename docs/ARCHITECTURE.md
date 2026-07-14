@@ -9,14 +9,15 @@ agent used the right tools, followed policy, and left the database correct.
 
 | Owned by | Responsibility |
 | --- | --- |
-| Agent Reliability Lab | Task definitions, environment lifecycle, tools/policies, tracing (planned), graders (planned), results |
+| Agent Reliability Lab | Task definitions, environment lifecycle, tools/policies, tracing, graders, results |
 | Agent under test | Decide which tools to call and with which arguments |
 | Retail environment | Synthetic SQLite “application” state: customers, orders, returns, refunds |
 | Outside the system | Live LLM providers, production CRM/order systems, dashboards, public benchmarks |
 
-Today the lab owns packaging, CLI help, the retail SQLite environment, pure
-policies, and typed tools. The agent loop, traces, graders, and evaluation CLI
-remain planned.
+Today the lab owns packaging, evaluation CLI, the retail SQLite environment,
+pure policies, typed tools, task loading, the agent loop with traces, three
+graders, and scripted reference/failing agents. A visual dashboard is not
+implemented yet.
 
 ## 2. Business failure model
 
@@ -27,10 +28,10 @@ modes:
 | --- | --- | --- |
 | Wrong customer | Identity and ownership policies in tools | Implemented in tools/policies |
 | Ineligible return | Return-window / final-sale policy | Implemented in tools/policies |
-| Incorrect refund amount or record | Final-state grader against persisted rows | Planned |
-| Approval bypass | High-value refund requires deterministic approval | Enforced in tools; grader planned |
-| Duplicate mutation | Idempotency keys + tool replay handling | Implemented in tools |
-| Fluent answer but no state change | Persisted-state assertions in final-state grader | Planned |
+| Incorrect refund amount or record | Final-state grader against persisted rows | Implemented |
+| Approval bypass | High-value refund requires deterministic approval | Enforced in tools and PolicyGrader |
+| Duplicate mutation | Idempotency keys + tool replay handling | Implemented in tools and graders |
+| Fluent answer but no state change | Persisted-state assertions in final-state grader | Implemented |
 
 ## 3. Architecture principles
 
@@ -54,40 +55,38 @@ flowchart TD
     Lab --> Result[Evaluation result]
 ```
 
-The lab creates the environment and exposes typed tools. Capturing a harness
-trace and grading outcomes remain planned.
+The lab creates the environment, exposes typed tools, records a harness trace,
+grades outcomes, and writes JSON artifacts.
 
 ## 5. Phase 1 execution flow
 
 ```mermaid
 flowchart TD
     A[Load task] --> B[Create and seed database]
-    B --> C["Run agent tool loop (planned)"]
+    B --> C[Run agent tool loop]
     C --> D[Invoke typed tools]
-    D --> E["Capture trace (planned)"]
+    D --> E[Capture trace]
     E --> F[Inspect final state]
-    F --> G["Run three graders (planned)"]
-    G --> H["Save result (planned)"]
+    F --> G[Run three graders]
+    G --> H[Save result]
 ```
 
-**Implemented today:** create schema, seed a deterministic fixture, run pure
-policies and seven typed tools through an isolated `RetailEnvironment`, then
-clean up the temporary file.
-
-**Still planned:** JSON task loading, agent loop, tracing, graders, and result
-artifacts.
+**Implemented today:** load a validated JSON task, open a fresh
+`RetailEnvironment`, run an agent through typed tools with runner-owned
+tracing, grade with FinalState/ToolCall/Policy graders before cleanup, and
+write a JSON-safe artifact under `artifacts/`.
 
 ## 6. Component responsibilities
 
 | Component | Responsibility | Status | Important boundary |
 | --- | --- | --- | --- |
-| `cli.py` | User entrypoint | Implemented: `--help` / `--version` | Must not embed domain SQL or grading logic |
-| `agents/` | Agent protocol and scripted reference agent | Planned (package stub) | Agents call tools; they do not write graders |
+| `cli.py` | User entrypoint | Implemented: list/run/show evaluation commands | Must not embed domain SQL or grading logic |
+| `agents/` | Agent protocol, reference agent, failing demos | Implemented | Agents call tools; they do not write graders |
 | `domains/retail/` | Schema, models, fixtures, environment, policies, tools | Implemented through Checkpoint 2 | SQLite is the system of record; policies stay pure |
-| `harness/` | Task models, isolation, runner, traces | Planned (package stub) | Owns tracing; tools do not |
-| `graders/` | Final-state, tool-call, policy graders | Planned (package stub) | Read DB + trace; do not call LLMs in Phase 1 |
-| `evals/retail/tasks/` | JSON evaluation task definitions | Planned (directory not created yet) | Tasks declare expected outcomes, not agent code |
-| `artifacts/` | Machine-readable run results | Planned (gitignored path) | Local only; no secrets |
+| `harness/` | Task models, isolation, runner, traces | Implemented | Owns tracing; tools do not |
+| `graders/` | Final-state, tool-call, policy graders | Implemented | Read DB + trace; do not call LLMs in Phase 1 |
+| `evals/retail/tasks/` | JSON evaluation task definitions | Implemented (ten tasks) | Tasks declare expected outcomes, not agent code |
+| `artifacts/` | Machine-readable run results | Implemented (gitignored path) | Local only; no secrets |
 
 ## 7. Implemented data architecture
 
@@ -184,7 +183,7 @@ flowchart TD
 | --- | --- | --- |
 | Policy | Pure business decisions (`PolicyDecision`) | SQL, DB connections, wall clock, trace recording |
 | Tool | Typed I/O, SQLite queries/mutations, policy invocation | Direct TraceRecorder dependency |
-| Harness (planned) | Trace wrapping around `invoke_tool` | Domain business rules |
+| Harness | Trace wrapping around `invoke_tool` | Domain business rules |
 
 `CaseEvent` rows are business/audit state inside the retail environment. They
 are **not** harness execution traces.
@@ -259,11 +258,9 @@ approval are denied.
 Phase 1 `create_return` stores returns as `approved` so a later refund can
 proceed without a separate approval workflow for the return itself.
 
-## 10. Planned evaluation architecture
+## 10. Evaluation architecture
 
-Boundaries planned for later Phase 1 checkpoints:
-
-| Piece | Expected ownership |
+| Piece | Ownership |
 | --- | --- |
 | Runner-owned tracing | `harness/` — wrap tool execution; tools must not record traces themselves |
 | Task definitions | `evals/retail/tasks/` — input, fixture, expected state/tool constraints |
@@ -272,7 +269,7 @@ Boundaries planned for later Phase 1 checkpoints:
 | Policy grader | AuthZ, return window, final sale, approvals, cross-customer rules |
 | Scripted reference agent | Deterministic happy-path and failing trajectories without an LLM |
 
-See also [EVALUATION.md](EVALUATION.md) for the intended grader contracts.
+See also [EVALUATION.md](EVALUATION.md) for grader contracts.
 
 ## 11. Trust and safety boundaries
 
@@ -284,8 +281,8 @@ See also [EVALUATION.md](EVALUATION.md) for the intended grader contracts.
 | Unique return/refund idempotency keys | Implemented in schema and tools |
 | Cross-customer access prevention in tools/policies | Implemented |
 | Session verification before sensitive tools | Implemented |
-| Trace redaction / no secrets in traces | Planned |
-| Rule-based graders (no LLM-as-judge in Phase 1) | Planned |
+| Trace redaction / no secrets in traces | Implemented |
+| Rule-based graders (no LLM-as-judge in Phase 1) | Implemented |
 
 Temporary `*.db` files and `artifacts/` are gitignored.
 
@@ -304,10 +301,12 @@ Background ADR: [decisions/0001-deterministic-first.md](decisions/0001-determini
 
 ## 13. Current status and next step
 
-**Checkpoints 0–2 are implemented:** packaging/CLI/tooling; SQLite retail
-schema, models, fixtures, and environment; pure policies and seven typed tools.
+**Checkpoints 0–6 are implemented:** packaging and evaluation CLI; retail
+SQLite domain; ten JSON tasks; runner and traces; three graders; reference and
+failing agents.
 
-**Checkpoint 3 is next:** add ten validated JSON evaluation tasks that exercise
-these tools under controlled fixtures.
+**Checkpoint 7 is next:** broader polish for coverage, CI hardening, and
+contributor documentation depth. A visual dashboard remains out of scope for
+the Phase 1 core harness.
 
 Roadmap: [PHASES.md](PHASES.md).

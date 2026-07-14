@@ -1,0 +1,33 @@
+{
+  "task_id": "final_sale_item",
+  "task_version": "1.0.0",
+  "title": "Final-sale item cannot be returned",
+  "business_description": "Customer Alice tries to return a final-sale mug. Policy must deny the return.",
+  "user_request": "Please return order fs_ord_1001 for customer fs_cust_alice. Email alice@example.test, phone +1-555-0100.",
+  "fixture_id": "final_sale",
+  "policy_tags": ["final_sale"],
+  "maximum_steps": 10,
+  "expected_outcome": "final_sale_denied",
+  "expected_final_state": [
+    {
+      "table": "returns",
+      "filters": {"order_id": "fs_ord_1001"},
+      "expected_count": 0,
+      "expected_fields": {}
+    },
+    {
+      "table": "refunds",
+      "filters": {},
+      "expected_count": 0,
+      "expected_fields": {}
+    }
+  ],
+  "expected_tool_calls": [
+    {"tool_name": "verify_customer", "critical_arguments": {"customer_id": "fs_cust_alice"}},
+    {"tool_name": "check_return_eligibility", "critical_arguments": {"order_id": "fs_ord_1001"}}
+  ],
+  "forbidden_tool_calls": ["create_return", "create_refund"],
+  "critical_ordering_constraints": [
+    {"before": "verify_customer", "after": "check_return_eligibility"}
+  ]
+}
