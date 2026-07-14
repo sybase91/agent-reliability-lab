@@ -20,7 +20,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
 
       - name: Install package
-        run: python -m pip install -e ".[dev]"
+        run: python -m pip install -e ".[dev,ui]"
 
       - name: Ruff format check
         run: ruff format --check .
@@ -31,10 +31,13 @@ jobs:
       - name: Mypy
         run: mypy src
 
-      - name: Pytest
-        run: pytest -q
+      - name: Pytest with coverage
+        run: pytest -q --cov=src/agent_reliability_lab --cov-report=term-missing --cov-fail-under=85
 
       - name: Smoke
         run: |
           python -c "import agent_reliability_lab; print('Package import successful')"
           python -m agent_reliability_lab.cli --help
+
+      - name: Streamlit AppTest
+        run: pytest -q tests/ui

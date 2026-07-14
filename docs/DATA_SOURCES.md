@@ -18,6 +18,12 @@ Registered fixture IDs: `eligible_return`, `expired_return`, `final_sale`,
 `cross_customer_access`, `already_refunded`, `missing_order`,
 `idempotent_retry`.
 
+### Checkpoint 3 tasks (implemented)
+
+JSON tasks under `evals/retail/tasks/` map one-to-one onto those fixtures (for
+example `eligible_full_return` → `eligible_return`). Tasks contain no raw SQL,
+Python expressions, secrets, or real customer information.
+
 ## Planned future sources
 
 These are **not** integrated in Phase 1. Links and intended uses:

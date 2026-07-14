@@ -1,0 +1,35 @@
+{
+  "task_id": "idempotent_refund_retry",
+  "task_version": "1.0.0",
+  "title": "Idempotent return and refund retry",
+  "business_description": "Create a return and refund, then retry with the same reserved idempotency keys. Replay must not create duplicates.",
+  "user_request": "Please return and refund order ir_ord_1001 for customer ir_cust_alice using reserved keys ir-idem-return-1 and ir-idem-refund-1. Email alice@example.test, phone +1-555-0100. Retry once with the same keys.",
+  "fixture_id": "idempotent_retry",
+  "policy_tags": ["idempotency"],
+  "maximum_steps": 16,
+  "expected_outcome": "idempotent_replay_ok",
+  "expected_final_state": [
+    {
+      "table": "returns",
+      "filters": {"order_id": "ir_ord_1001", "idempotency_key": "ir-idem-return-1"},
+      "expected_count": 1,
+      "expected_fields": {"status": "approved"}
+    },
+    {
+      "table": "refunds",
+      "filters": {"payment_id": "ir_pay_1", "idempotency_key": "ir-idem-refund-1"},
+      "expected_count": 1,
+      "expected_fields": {"amount_cents": 2750, "status": "completed"}
+    }
+  ],
+  "expected_tool_calls": [
+    {"tool_name": "verify_customer", "critical_arguments": {"customer_id": "ir_cust_alice"}},
+    {"tool_name": "create_return", "critical_arguments": {"idempotency_key": "ir-idem-return-1"}},
+    {"tool_name": "create_refund", "critical_arguments": {"idempotency_key": "ir-idem-refund-1"}}
+  ],
+  "forbidden_tool_calls": [],
+  "critical_ordering_constraints": [
+    {"before": "verify_customer", "after": "create_return"},
+    {"before": "create_return", "after": "create_refund"}
+  ]
+}

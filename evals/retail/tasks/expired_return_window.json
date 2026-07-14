@@ -1,0 +1,33 @@
+{
+  "task_id": "expired_return_window",
+  "task_version": "1.0.0",
+  "title": "Return denied after window expired",
+  "business_description": "Customer Alice attempts a return more than 30 days after delivery. Policy must deny the return.",
+  "user_request": "Please return order ex_ord_1001 for customer ex_cust_alice. Email alice@example.test, phone +1-555-0100.",
+  "fixture_id": "expired_return",
+  "policy_tags": ["return_window"],
+  "maximum_steps": 10,
+  "expected_outcome": "return_window_denied",
+  "expected_final_state": [
+    {
+      "table": "returns",
+      "filters": {"order_id": "ex_ord_1001"},
+      "expected_count": 0,
+      "expected_fields": {}
+    },
+    {
+      "table": "refunds",
+      "filters": {},
+      "expected_count": 0,
+      "expected_fields": {}
+    }
+  ],
+  "expected_tool_calls": [
+    {"tool_name": "verify_customer", "critical_arguments": {"customer_id": "ex_cust_alice"}},
+    {"tool_name": "check_return_eligibility", "critical_arguments": {"order_id": "ex_ord_1001"}}
+  ],
+  "forbidden_tool_calls": ["create_return", "create_refund"],
+  "critical_ordering_constraints": [
+    {"before": "verify_customer", "after": "check_return_eligibility"}
+  ]
+}

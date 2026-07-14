@@ -1,0 +1,41 @@
+{
+  "task_id": "partial_quantity_return",
+  "task_version": "1.0.0",
+  "title": "Partial quantity return",
+  "business_description": "Customer Alice returns one of three identical mugs and receives a proportional refund.",
+  "user_request": "Please return quantity 1 of item pr_oi_1 from order pr_ord_1001 for customer pr_cust_alice. Email alice@example.test, phone +1-555-0100.",
+  "fixture_id": "partial_return",
+  "policy_tags": ["partial_return", "refund"],
+  "maximum_steps": 12,
+  "expected_outcome": "partial_return_and_refund_completed",
+  "expected_final_state": [
+    {
+      "table": "returns",
+      "filters": {"order_id": "pr_ord_1001", "customer_id": "pr_cust_alice"},
+      "expected_count": 1,
+      "expected_fields": {"status": "approved"}
+    },
+    {
+      "table": "return_items",
+      "filters": {"order_item_id": "pr_oi_1"},
+      "expected_count": 1,
+      "expected_fields": {"quantity": 1}
+    },
+    {
+      "table": "refunds",
+      "filters": {"payment_id": "pr_pay_1"},
+      "expected_count": 1,
+      "expected_fields": {"amount_cents": 1500, "status": "completed"}
+    }
+  ],
+  "expected_tool_calls": [
+    {"tool_name": "verify_customer", "critical_arguments": {"customer_id": "pr_cust_alice"}},
+    {"tool_name": "create_return", "critical_arguments": {"order_id": "pr_ord_1001"}},
+    {"tool_name": "create_refund", "critical_arguments": {"amount_cents": 1500}}
+  ],
+  "forbidden_tool_calls": [],
+  "critical_ordering_constraints": [
+    {"before": "verify_customer", "after": "create_return"},
+    {"before": "create_return", "after": "create_refund"}
+  ]
+}

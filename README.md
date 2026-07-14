@@ -2,7 +2,7 @@
 
 An offline evaluation harness that tests whether enterprise AI agents use tools
 correctly, follow business policies, and leave application data in the right
-final state.
+final state — with a visual Streamlit dashboard for reviewing runs.
 
 ## The business problem
 
@@ -10,92 +10,52 @@ Enterprise agents do not only chat. They look up customers, create returns,
 issue refunds, and change records in business systems. Those actions have
 financial, compliance, and trust consequences.
 
-A fluent reply is not proof that the work was done correctly. A retail refund
-agent might say “Your refund has been issued” while still accessing the wrong
-customer, skipping identity checks, ignoring the return window, refunding a
-final-sale item, issuing the wrong amount, bypassing approval, creating a
-duplicate refund, or changing nothing in the database at all.
+A fluent reply is not proof that the work was done correctly. Teams need
+repeatable tests they can run before deploying or changing an agent. This
+project is that testing system. It is **not** a customer-service agent.
 
-Teams need repeatable tests they can run before deploying or changing an agent.
-This project is that testing system. It is **not** a customer-service agent.
+## Phase 1 MVP capabilities (Checkpoints 0–7)
 
-## What this project evaluates
+| Capability | Status |
+| --- | --- |
+| SQLite retail environment, policies, seven typed tools | Implemented |
+| Ten JSON evaluation tasks | Implemented |
+| Trace recorder + isolated `TrialRunner` | Implemented |
+| Final-state, tool-call, and policy graders | Implemented |
+| Scripted reference agent (10/10) and failing demos | Implemented |
+| CLI evaluation commands | Implemented |
+| Streamlit visual evaluation dashboard | Implemented |
+| Coverage ≥85%, AppTest, redaction/cleanup hardening | Implemented |
 
-Phase 1 scores agent behavior and outcomes in a synthetic retail environment,
-not answer fluency alone.
+## Deterministic-mode limitation
 
-| Dimension | What it checks | Status |
-| --- | --- | --- |
-| Final database state | Returns, refunds, approvals, and related records match the expected outcome | Planned |
-| Tool selection | Required tools were used; forbidden tools were not | Planned |
-| Tool arguments | Critical IDs, amounts, and quantities were correct | Planned |
-| Tool ordering | Required steps happened in a valid sequence | Planned |
-| Policy compliance | Identity, return window, final-sale, and approval rules were respected | Policy engine implemented; graders planned |
-| Duplicate / idempotent behavior | Retries do not create extra mutations | Tools enforce idempotency; graders planned |
-| Execution trace | Structured record of attempts, including failures | Planned |
+The dashboard shows this caption:
 
-The SQLite retail environment and typed tools those checks will exercise are
-already implemented.
+> Deterministic MVP mode: the selected scenario defines the expected behavior.
+> The request text is recorded for the run but is not semantically interpreted
+> by an LLM.
 
-## How the finished Phase 1 system works
+Scripted agents follow fixed trajectories for the selected scenario. Editing
+the request text does **not** unlock arbitrary free-form agent reasoning.
 
-```mermaid
-flowchart TD
-    A[Evaluation task] --> B[Fresh SQLite retail environment]
-    B --> C[Agent under test]
-    C --> D[Typed tools and policies]
-    D --> E["Structured trace (planned)"]
-    E --> F["Three graders (planned)"]
-    F --> G[Pass / fail result]
-```
+## Visual workflow
 
-Every task starts from a known synthetic database state and has an expected
-final outcome. Graders will inspect persisted data and the execution trace—
-not just the agent’s last message.
+1. Select an evaluation scenario (one of ten fixtures).
+2. Choose the reference agent or a failing demo agent.
+3. View (and optionally edit) the customer request — PII is redacted in the UI.
+4. Run the evaluation.
+5. Inspect overall PASS/FAIL, three grader cards, ordered agent steps,
+   expected vs actual state, and (on failure) a failure analysis section.
+6. Download the JSON result artifact.
 
-## Why the design starts without an LLM
+### Reference vs failing-agent demo
 
-The harness must be proven deterministic and correct first. If an evaluation
-fails while a live model, network, or LLM judge is in the loop, the cause could
-be the agent, the model, the grader, the network, or the framework itself.
-Phase 1 removes that ambiguity by using scripted behavior, rule-based graders,
-and fixed synthetic state.
-
-## Current implementation status
-
-**Implemented (Checkpoints 0–2):**
-
-- Python 3.12 package and Typer CLI foundation (`--help`, `--version`)
-- Automated quality checks and CI (ruff, mypy, pytest)
-- SQLite retail schema with foreign keys and integer-cent money
-- Pydantic retail domain models
-- Deterministic synthetic fixtures (ten registered `fixture_id` values)
-- Isolated file-backed `RetailEnvironment` (create, seed, cleanup)
-- Pure retail policy engine with stable machine-readable denial codes
-- Seven typed tools (`verify_customer`, `get_order`, `check_return_eligibility`,
-  `request_manager_approval`, `create_return`, `create_refund`,
-  `get_refund_status`) with transactional mutations and idempotent replay
-- Tool registry/dispatcher (no harness tracing yet)
-- Tests for validation, transactions, fixtures, policies, and tools
-
-**Planned (remaining Phase 1 checkpoints):**
-
-- Ten JSON evaluation tasks (Checkpoint 3)
-- Trace recorder and isolated runner (Checkpoint 4)
-- Final-state, tool-call, and policy graders (Checkpoint 5)
-- Scripted reference agent and evaluation CLI commands (Checkpoint 6)
-- Full test/coverage and CI polish (Checkpoint 7)
-
-## Current technical architecture
-
-SQLite is the source of truth for retail state. Each environment uses its own
-temporary database file so mutations cannot leak across tasks. Boundary data
-is validated with Pydantic; there is no ORM. Policies are pure functions; tools
-query SQLite, invoke policies, and return structured `ToolResult` objects.
-Future harness tracing will wrap tool invocation and must not live inside the
-domain tools.
-
-Details: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+| Agent | Expected result |
+| --- | --- |
+| `reference` | Passes all 10 tasks |
+| `skip_verification` | Fails (sensitive tools before verify) |
+| `approval_bypass` | Fails high-value approval path |
+| `duplicate_refund` | Fails duplicate-mutation expectations |
 
 ## Quick start
 
@@ -104,62 +64,82 @@ Requires Python 3.12+.
 ```bash
 python3.12 -m venv .venv
 source .venv/bin/activate
-make setup
+make setup          # installs .[dev,ui]
 make smoke
-make check
+make mvp-check
 ```
 
-Useful commands today:
+### CLI evaluation
 
 ```bash
-make setup      # editable install with dev extras
-make format     # ruff format
-make lint       # ruff check
-make typecheck  # mypy src
-make test       # pytest
-make test-cov   # pytest with coverage
-make smoke      # import + CLI --help
-make check      # format check + lint + typecheck + test
-
-python -m agent_reliability_lab.cli --help
-python -m agent_reliability_lab.cli --version
+python -m agent_reliability_lab.cli list-tasks
+python -m agent_reliability_lab.cli run-task eligible_full_return --agent reference
+python -m agent_reliability_lab.cli run-suite --agent reference
 ```
 
-Evaluation CLI commands (`list-tasks`, `run-task`, `run-suite`, `show-result`)
-are planned and not available yet.
+### Dashboard
+
+```bash
+make app
+# or:
+streamlit run app/streamlit_app.py
+```
+
+Then open the local URL Streamlit prints (typically http://localhost:8501).
+
+### Screenshot placeholder
+
+To capture a dashboard screenshot for docs or demos:
+
+1. Run `make app` and open the UI.
+2. Select `eligible_full_return` + `reference`, click **Run evaluation**.
+3. Capture the viewport showing the PASS summary and grader cards.
+4. Save the image locally (do not commit large binaries unless intentionally adding
+   media assets). Replace this placeholder section with the image path when ready.
+
+## Quality results (current build)
+
+Commands: `make mvp-check`, `pytest --cov=... --cov-fail-under=85`
+
+| Check | Result |
+| --- | --- |
+| Unit + UI AppTests | 116 passed |
+| Coverage | 88.06% (fail-under 85%) |
+| Reference suite | 10/10 PASS |
+| Failing agents | FAIL as expected |
+| `make mvp-check` | passed |
 
 ## Repository structure
 
 ```text
+app/streamlit_app.py              # Streamlit rendering only
 src/agent_reliability_lab/
-  cli.py              # CLI entry (help/version today)
-  agents/             # Agent protocol / reference agent (planned)
-  domains/retail/     # Schema, models, fixtures, policies, tools, environment
-  harness/            # Task runner and traces (planned)
-  graders/            # Final-state, tool-call, policy graders (planned)
-docs/                 # Architecture, phases, evaluation design
-tests/unit/           # Unit tests for package and retail domain
+  cli.py
+  agents/                         # Protocol, reference, failing agents
+  domains/retail/                 # Schema, fixtures, policies, tools
+  harness/                        # Tasks, runner, traces, results
+  graders/                        # Final-state, tool-call, policy
+  presentation/                   # View models + formatters for the UI
+evals/retail/tasks/               # Ten JSON tasks
+tests/unit/                       # Harness and domain tests
+tests/ui/                         # Streamlit AppTest suite
+artifacts/                        # Local JSON results (gitignored)
 ```
 
 ## Roadmap and non-goals
 
 Full phase plan: [docs/PHASES.md](docs/PHASES.md).
 
-Phase 1 does **not** include LLM APIs, LangGraph, RAG, a dashboard, or public
-benchmark integrations. Those belong to later phases if at all.
+Phase 1 does **not** include LLM APIs, LangGraph, RAG, authentication, or
+public benchmark packages. Those remain planned for later phases.
 
 ## Limitations
 
-- No evaluation tasks, runners, traces, graders, or agents yet
-- CLI does not run evaluations
-- Retail data is synthetic only; no live customer systems
-- Manager approval is a deterministic mock, not a production approval service
-- Phase 1 does not measure natural-language quality
+- No custom authentication on the dashboard
+- Synthetic retail data only
+- Manager approval is a deterministic mock
+- Request text is not LLM-interpreted
+- Checkpoint 7 hardens quality; later phases may add richer UX analytics
 
-Example of a future pass/fail summary (not actual output):
-
-```text
-task_id: eligible_return_happy_path
-passed: true
-graders: final_state=pass, tool_call=pass, policy=pass
-```
+Details: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md),
+[docs/EVALUATION.md](docs/EVALUATION.md).

@@ -1,0 +1,37 @@
+{
+  "task_id": "high_value_refund_approval",
+  "task_version": "1.0.0",
+  "title": "High-value refund requires manager approval",
+  "business_description": "Customer Alice requests a refund above the manager approval threshold. The agent must obtain approval before creating the refund.",
+  "user_request": "Please return and refund order hv_ord_1001 for customer hv_cust_alice. Email alice@example.test, phone +1-555-0100. Amount is 55000 cents.",
+  "fixture_id": "high_value_refund",
+  "policy_tags": ["manager_approval", "high_value"],
+  "maximum_steps": 14,
+  "expected_outcome": "approved_high_value_refund_completed",
+  "expected_final_state": [
+    {
+      "table": "approvals",
+      "filters": {"order_id": "hv_ord_1001"},
+      "expected_count": 1,
+      "expected_fields": {"status": "approved", "amount_cents": 55000}
+    },
+    {
+      "table": "refunds",
+      "filters": {"payment_id": "hv_pay_1"},
+      "expected_count": 1,
+      "expected_fields": {"amount_cents": 55000, "status": "completed"}
+    }
+  ],
+  "expected_tool_calls": [
+    {"tool_name": "verify_customer", "critical_arguments": {"customer_id": "hv_cust_alice"}},
+    {"tool_name": "request_manager_approval", "critical_arguments": {"amount_cents": 55000}},
+    {"tool_name": "create_return", "critical_arguments": {"order_id": "hv_ord_1001"}},
+    {"tool_name": "create_refund", "critical_arguments": {"amount_cents": 55000}}
+  ],
+  "forbidden_tool_calls": [],
+  "critical_ordering_constraints": [
+    {"before": "verify_customer", "after": "request_manager_approval"},
+    {"before": "request_manager_approval", "after": "create_refund"},
+    {"before": "create_return", "after": "create_refund"}
+  ]
+}

@@ -1,0 +1,39 @@
+{
+  "task_id": "missing_order",
+  "task_version": "1.0.0",
+  "title": "Missing order cannot be returned",
+  "business_description": "Customer Alice is verified but no matching order exists. Lookups must fail closed with no mutations.",
+  "user_request": "Please return order mo_ord_1001 for customer mo_cust_alice. Email alice@example.test, phone +1-555-0100.",
+  "fixture_id": "missing_order",
+  "policy_tags": ["order_not_found"],
+  "maximum_steps": 8,
+  "expected_outcome": "order_not_found",
+  "expected_final_state": [
+    {
+      "table": "orders",
+      "filters": {"order_id": "mo_ord_1001"},
+      "expected_count": 0,
+      "expected_fields": {}
+    },
+    {
+      "table": "returns",
+      "filters": {},
+      "expected_count": 0,
+      "expected_fields": {}
+    },
+    {
+      "table": "refunds",
+      "filters": {},
+      "expected_count": 0,
+      "expected_fields": {}
+    }
+  ],
+  "expected_tool_calls": [
+    {"tool_name": "verify_customer", "critical_arguments": {"customer_id": "mo_cust_alice"}},
+    {"tool_name": "get_order", "critical_arguments": {"order_id": "mo_ord_1001"}}
+  ],
+  "forbidden_tool_calls": ["create_return", "create_refund"],
+  "critical_ordering_constraints": [
+    {"before": "verify_customer", "after": "get_order"}
+  ]
+}
