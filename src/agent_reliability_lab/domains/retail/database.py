@@ -9,10 +9,18 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from agent_reliability_lab.domains.retail.models import (
+    Approval,
+    ApprovalStatus,
+    CaseEvent,
+    CaseEventType,
     Customer,
     Order,
     OrderItem,
     OrderStatus,
+    Payment,
+    PaymentMethod,
+    PaymentStatus,
+    Product,
     Refund,
     RefundStatus,
     Return,
@@ -97,10 +105,13 @@ CREATE TABLE IF NOT EXISTS refunds (
 
 CREATE TABLE IF NOT EXISTS approvals (
     approval_id TEXT PRIMARY KEY,
-    refund_id TEXT NOT NULL REFERENCES refunds(refund_id),
+    order_id TEXT NOT NULL REFERENCES orders(order_id),
+    payment_id TEXT NOT NULL REFERENCES payments(payment_id),
+    amount_cents INTEGER NOT NULL CHECK (amount_cents > 0),
     status TEXT NOT NULL,
     requested_at TEXT NOT NULL,
-    resolved_at TEXT
+    resolved_at TEXT,
+    refund_id TEXT REFERENCES refunds(refund_id)
 );
 
 CREATE TABLE IF NOT EXISTS case_events (
@@ -118,6 +129,8 @@ CREATE INDEX IF NOT EXISTS idx_payments_order_id ON payments(order_id);
 CREATE INDEX IF NOT EXISTS idx_returns_order_id ON returns(order_id);
 CREATE INDEX IF NOT EXISTS idx_return_items_return_id ON return_items(return_id);
 CREATE INDEX IF NOT EXISTS idx_refunds_return_id ON refunds(return_id);
+CREATE INDEX IF NOT EXISTS idx_approvals_order_id ON approvals(order_id);
+CREATE INDEX IF NOT EXISTS idx_approvals_payment_id ON approvals(payment_id);
 """
 
 REQUIRED_TABLES: tuple[str, ...] = (
@@ -239,4 +252,53 @@ def row_to_refund(row: sqlite3.Row) -> Refund:
         status=RefundStatus(row["status"]),
         created_at=_parse_utc(row["created_at"]),
         idempotency_key=row["idempotency_key"],
+    )
+
+
+def row_to_payment(row: sqlite3.Row) -> Payment:
+    """Convert a payments row into a Payment model."""
+    return Payment(
+        payment_id=row["payment_id"],
+        order_id=row["order_id"],
+        amount_cents=row["amount_cents"],
+        status=PaymentStatus(row["status"]),
+        method=PaymentMethod(row["method"]),
+        paid_at=_parse_utc(row["paid_at"]),
+    )
+
+
+def row_to_product(row: sqlite3.Row) -> Product:
+    """Convert a products row into a Product model."""
+    return Product(
+        product_id=row["product_id"],
+        sku=row["sku"],
+        name=row["name"],
+        unit_price_cents=row["unit_price_cents"],
+        final_sale=bool(row["final_sale"]),
+    )
+
+
+def row_to_approval(row: sqlite3.Row) -> Approval:
+    """Convert an approvals row into an Approval model."""
+    return Approval(
+        approval_id=row["approval_id"],
+        order_id=row["order_id"],
+        payment_id=row["payment_id"],
+        amount_cents=row["amount_cents"],
+        status=ApprovalStatus(row["status"]),
+        requested_at=_parse_utc(row["requested_at"]),
+        resolved_at=_parse_utc_optional(row["resolved_at"]),
+        refund_id=row["refund_id"],
+    )
+
+
+def row_to_case_event(row: sqlite3.Row) -> CaseEvent:
+    """Convert a case_events row into a CaseEvent model."""
+    return CaseEvent(
+        case_event_id=row["case_event_id"],
+        customer_id=row["customer_id"],
+        order_id=row["order_id"],
+        event_type=CaseEventType(row["event_type"]),
+        payload_json=row["payload_json"],
+        created_at=_parse_utc(row["created_at"]),
     )

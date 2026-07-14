@@ -180,11 +180,20 @@ class Refund(RetailModel):
 
 
 class Approval(RetailModel):
+    """Manager approval for a proposed refund amount.
+
+    Approval is requested before high-value refund creation. ``refund_id`` stays
+    null until ``create_refund`` links the completed refund.
+    """
+
     approval_id: str
-    refund_id: str
+    order_id: str
+    payment_id: str
+    amount_cents: PositiveCents
     status: ApprovalStatus
     requested_at: datetime
     resolved_at: datetime | None = None
+    refund_id: str | None = None
 
     @field_validator("requested_at", "resolved_at")
     @classmethod

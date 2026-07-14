@@ -6,7 +6,10 @@ Evaluation runtime is **not implemented** yet (planned for Phase 1 Checkpoints 3
 This document describes the intended design so contributors do not invent a
 single generic “Evaluator” when those checkpoints land.
 
-Phase 1 is **in progress**. Checkpoint 0 foundation only is implemented today.
+Phase 1 is **in progress**. Checkpoints 0–2 are implemented today (packaging,
+retail SQLite environment, pure policies, and typed tools). Graders and the task
+runner remain planned; they will score agent behavior against the Checkpoint 2
+tool and policy surface.
 
 ## Planned graders
 

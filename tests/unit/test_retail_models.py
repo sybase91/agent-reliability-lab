@@ -104,10 +104,13 @@ def test_all_models_accept_valid_data() -> None:
     )
     Approval(
         approval_id="a1",
-        refund_id=refund.refund_id,
+        order_id="o1",
+        payment_id="pay1",
+        amount_cents=refund.amount_cents,
         status=ApprovalStatus.PENDING,
         requested_at=REFERENCE_TIME,
         resolved_at=None,
+        refund_id=None,
     )
     CaseEvent(
         case_event_id="e1",
